@@ -1,14 +1,10 @@
 import streamlit as st  # type: ignore
 
-from constants import GEMINI_API_KEY_NAME
-from services.gemini_service import has_gemini_api_key
 from services.question_io import question_dicts_to_models
-from services.quiz_service import queue_generation
-from state import reset_quiz, start_quiz
+from state import reset_to_initial_state, start_quiz
 
 
 def render_completed_screen() -> None:
-    key_is_configured = has_gemini_api_key()
     questions = question_dicts_to_models(st.session_state.questions)
     total_questions = len(questions)
     answered_questions = sum(1 for answer in st.session_state.answers if answer is not None)
@@ -42,21 +38,12 @@ def render_completed_screen() -> None:
 
     play_again_col, regenerate_col, setup_col = st.columns(3)
     with play_again_col:
-        if st.button("Play Again"):
+        st.button("Give an AI Summary")
+    with regenerate_col:
+        if st.button("Restart Current Quiz"):
             start_quiz()
             st.rerun()
-    with regenerate_col:
-        if st.button("Generate Fresh Quiz", disabled=not key_is_configured):
-            queue_generation(
-                count=st.session_state.questions_to_generate,
-                jump_to="first_new",
-                next_phase="ready",
-                replace_existing=True,
-            )
-            st.rerun()
-        if not key_is_configured:
-            st.caption(f"Set `{GEMINI_API_KEY_NAME}` in secrets to enable quiz generation.")
     with setup_col:
-        if st.button("Back to Setup"):
-            reset_quiz(phase="setup")
+        if st.button("Start from Scratch"):
+            reset_to_initial_state()
             st.rerun()

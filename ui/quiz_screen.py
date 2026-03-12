@@ -65,6 +65,44 @@ def _render_scroll_to_top() -> None:
     )
 
 
+def _render_empty_option_rows() -> None:
+    option_rows = ((0, 1), (2, 3))
+    for row_number, option_indexes in enumerate(option_rows, start=1):
+        with st.container(key=f"option_row_{row_number}"):
+            columns = st.columns(2, gap="small")
+            for column, option_index in zip(columns, option_indexes):
+                with column:
+                    st.button(
+                        " ",
+                        key=f"empty_answer_{option_index}",
+                        disabled=True,
+                    )
+
+
+def _render_option_rows(options: list[str], submitted: bool, selected_option: str | None, correct_answer: str) -> None:
+    option_rows = ((0, 1), (2, 3))
+    for row_number, option_indexes in enumerate(option_rows, start=1):
+        with st.container(key=f"option_row_{row_number}"):
+            columns = st.columns(2, gap="small")
+            for column, option_index in zip(columns, option_indexes):
+                option = options[option_index]
+                with column:
+                    if submitted:
+                        css_class = _get_option_feedback_class(
+                            option=option,
+                            selected_option=selected_option,
+                            correct_answer=correct_answer,
+                        )
+                        _render_option_feedback(option, css_class)
+                    else:
+                        if st.button(
+                            option,
+                            key=f"answer_{option_index}",
+                        ):
+                            submit_answer(option)
+                            st.rerun()
+
+
 def render_quiz_ui() -> None:
     key_is_configured = has_gemini_api_key()
     questions = st.session_state.questions
@@ -82,22 +120,12 @@ def render_quiz_ui() -> None:
             st.write(f"**Score:** {st.session_state.score}")
 
         st.markdown('<div class="question-box">No question present</div>', unsafe_allow_html=True)
-
-        with st.container(key="option-grid"):
-            col1, col2 = st.columns(2)
-            col3, col4 = st.columns(2)
-            columns = [col1, col2, col3, col4]
-
-            for i in range(4):
-                with columns[i]:
-                    st.button(
-                        " ",
-                        key=f"empty_btn_{i}",
-                        disabled=True,
-                    )
+        _render_empty_option_rows()
 
         st.info("Generate a question from the sidebar to begin.")
         return
+
+    is_last_question = st.session_state.question_index == len(questions) - 1
 
     col_a, col_b = st.columns([3, 1])
     with col_a:
@@ -113,31 +141,12 @@ def render_quiz_ui() -> None:
     while len(options) < 4:
         options.append("N/A")
 
-    with st.container(key="option-grid"):
-        col1, col2 = st.columns(2)
-        col3, col4 = st.columns(2)
-        columns = [col1, col2, col3, col4]
-
-        if st.session_state.submitted:
-            selected_option = st.session_state.selected_option
-            correct_answer = current_q["correct_answer"]
-            for i, option in enumerate(options):
-                with columns[i]:
-                    css_class = _get_option_feedback_class(
-                        option=option,
-                        selected_option=selected_option,
-                        correct_answer=correct_answer,
-                    )
-                    _render_option_feedback(option, css_class)
-        else:
-            for i, option in enumerate(options):
-                with columns[i]:
-                    if st.button(
-                        option,
-                        key=f"btn_{st.session_state.question_index}_{i}",
-                    ):
-                        submit_answer(option)
-                        st.rerun()
+    _render_option_rows(
+        options=options,
+        submitted=st.session_state.submitted,
+        selected_option=st.session_state.selected_option,
+        correct_answer=current_q["correct_answer"],
+    )
 
     if st.session_state.submitted:
         st.markdown("---")
@@ -152,12 +161,13 @@ def render_quiz_ui() -> None:
         back_col, next_col, generate_col = st.columns(3)
 
         with back_col:
-            if st.button("Back", disabled=st.session_state.question_index == 0, type="primary"):
+            if st.button("Back", key="quiz_back", disabled=st.session_state.question_index == 0, type="primary"):
                 go_to_previous_question()
                 st.rerun()
 
         with next_col:
-            if st.button("Next", type="primary"):
+            next_button_label = "End Quiz" if is_last_question else "Next"
+            if st.button(next_button_label, key="quiz_next", type="primary"):
                 try:
                     go_to_next_question()
                     st.rerun()
@@ -165,7 +175,7 @@ def render_quiz_ui() -> None:
                     st.error(f"Could not load the next question: {exc}")
 
         with generate_col:
-            if st.button("Generate a New Question", disabled=not key_is_configured):
+            if st.button("Generate a New Question", key="quiz_generate", disabled=not key_is_configured):
                 try:
                     queue_generation(
                         count=1,

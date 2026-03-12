@@ -21,6 +21,16 @@ def reset_quiz(phase: str = "setup") -> None:
     set_phase(phase)
 
 
+def reset_to_initial_state() -> None:
+    st.session_state.questions = []
+    st.session_state.answers = []
+    st.session_state.question_index = 0
+    st.session_state.selected_option = None
+    st.session_state.submitted = False
+    st.session_state.score = 0
+    set_phase("setup")
+
+
 def start_quiz() -> None:
     reset_quiz(phase="in_progress")
 
@@ -92,6 +102,8 @@ def initialize_state() -> None:
         st.session_state.phase = "setup"
     if "scroll_to_top" not in st.session_state:
         st.session_state.scroll_to_top = False
+    if "sidebar_default_applied" not in st.session_state:
+        st.session_state.sidebar_default_applied = False
 
     ensure_answer_slots()
     sync_current_question_state()

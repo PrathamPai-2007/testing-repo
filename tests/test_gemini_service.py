@@ -1,0 +1,81 @@
+import unittest
+from unittest.mock import patch
+
+from google.genai.errors import ServerError
+
+from services.gemini_service import _generate_content_with_retries, build_generation_prompt
+
+
+class _FakeModels:
+    def __init__(self, responses):
+        self._responses = list(responses)
+        self.calls = 0
+
+    def generate_content(self, *, model, contents):
+        self.calls += 1
+        response = self._responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+
+class _FakeClient:
+    def __init__(self, responses):
+        self.models = _FakeModels(responses)
+
+
+class _FakeResponse:
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+
+class GeminiRetryTests(unittest.TestCase):
+    def test_retries_temporary_server_error_then_succeeds(self) -> None:
+        client = _FakeClient(
+            [
+                ServerError(503, {"error": {"code": 503, "message": "busy", "status": "UNAVAILABLE"}}),
+                _FakeResponse("[]"),
+            ]
+        )
+
+        with patch("services.gemini_service.time.sleep") as sleep_mock:
+            response = _generate_content_with_retries(client, "prompt")
+
+        self.assertEqual(response.text, "[]")
+        self.assertEqual(client.models.calls, 2)
+        sleep_mock.assert_called_once_with(1.0)
+
+    def test_returns_clean_message_after_retry_exhaustion(self) -> None:
+        client = _FakeClient(
+            [
+                ServerError(503, {"error": {"code": 503, "message": "busy", "status": "UNAVAILABLE"}}),
+                ServerError(503, {"error": {"code": 503, "message": "busy", "status": "UNAVAILABLE"}}),
+                ServerError(503, {"error": {"code": 503, "message": "busy", "status": "UNAVAILABLE"}}),
+            ]
+        )
+
+        with patch("services.gemini_service.time.sleep") as sleep_mock:
+            with self.assertRaisesRegex(RuntimeError, "temporarily unavailable"):
+                _generate_content_with_retries(client, "prompt")
+
+        self.assertEqual(client.models.calls, 3)
+        self.assertEqual(sleep_mock.call_count, 2)
+
+
+class GeminiPromptTests(unittest.TestCase):
+    def test_build_generation_prompt_uses_grade_based_easy_guidance(self) -> None:
+        prompt = build_generation_prompt(topic="fractions", difficulty="easy", count=3)
+
+        self.assertIn('about "fractions"', prompt)
+        self.assertIn("Difficulty level: Easy (Grade 5 level kid).", prompt)
+        self.assertIn("Target a grade 5 student.", prompt)
+
+    def test_build_generation_prompt_supports_insane_difficulty(self) -> None:
+        prompt = build_generation_prompt(topic="physics", difficulty="insane", count=2)
+
+        self.assertIn("Difficulty level: Insane (Some of the hardest possible questions).", prompt)
+        self.assertIn("exceptionally challenging", prompt)
+
+
+if __name__ == "__main__":
+    unittest.main()

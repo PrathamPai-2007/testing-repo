@@ -1,17 +1,25 @@
 import json
 import os
 import re
+import time
 
 import streamlit as st  # type: ignore
 
-from constants import GEMINI_API_KEY_NAME
+from constants import DIFFICULTY_DETAILS, GEMINI_API_KEY_NAME
 from models import Question
 from services.question_io import validate_questions
 
 try:
     from google import genai
+    from google.genai.errors import APIError
 except ImportError:
     genai = None
+    APIError = None
+
+
+GEMINI_MODEL_NAME = "gemini-2.5-flash"
+RETRYABLE_GEMINI_ERROR_CODES = {429, 500, 502, 503, 504}
+GEMINI_RETRY_DELAYS_SECONDS = (1.0, 2.0)
 
 
 def get_gemini_api_key() -> str | None:
@@ -58,17 +66,60 @@ def _extract_json_payload(response_text: str) -> str:
     return text
 
 
-def generate_gemini_questions(topic: str, difficulty: str, count: int) -> list[Question]:
-    client = get_gemini_client()
+def _is_retryable_gemini_error(exc: Exception) -> bool:
+    return bool(APIError is not None and isinstance(exc, APIError) and getattr(exc, "code", None) in RETRYABLE_GEMINI_ERROR_CODES)
+
+
+def _build_generation_error(exc: Exception) -> RuntimeError:
+    if APIError is not None and isinstance(exc, APIError):
+        code = getattr(exc, "code", None)
+        message = (getattr(exc, "message", None) or "The Gemini API request failed.").strip()
+        if code in RETRYABLE_GEMINI_ERROR_CODES:
+            return RuntimeError(f"Gemini is temporarily unavailable ({code}). Please try again in a moment.")
+        return RuntimeError(f"Gemini request failed ({code}): {message}")
+
+    return RuntimeError(f"Gemini request failed: {exc}")
+
+
+def _generate_content_with_retries(client, prompt: str):
+    last_exc: Exception | None = None
+    for attempt in range(len(GEMINI_RETRY_DELAYS_SECONDS) + 1):
+        try:
+            return client.models.generate_content(
+                model=GEMINI_MODEL_NAME,
+                contents=prompt,
+            )
+        except Exception as exc:
+            last_exc = exc
+            if not _is_retryable_gemini_error(exc) or attempt >= len(GEMINI_RETRY_DELAYS_SECONDS):
+                raise _build_generation_error(exc) from exc
+            time.sleep(GEMINI_RETRY_DELAYS_SECONDS[attempt])
+
+    if last_exc is not None:
+        raise _build_generation_error(last_exc) from last_exc
+    raise RuntimeError("Gemini request failed before a response was received.")
+
+
+def build_generation_prompt(topic: str, difficulty: str, count: int) -> str:
     normalized_topic = topic.strip() or "general knowledge"
-    prompt = f"""
-Generate exactly {count} unique {difficulty} multiple-choice quiz questions about "{normalized_topic}".
+    difficulty_key = difficulty if difficulty in DIFFICULTY_DETAILS else "medium"
+    difficulty_details = DIFFICULTY_DETAILS[difficulty_key]
+    difficulty_label = difficulty_details["label"]
+    difficulty_description = difficulty_details["description"]
+    prompt_guidance = difficulty_details["prompt_guidance"]
+
+    return f"""
+Generate exactly {count} unique multiple-choice quiz questions about "{normalized_topic}".
+Difficulty level: {difficulty_label} ({difficulty_description}).
+Audience guidance: {prompt_guidance}
 Requirements:
+- Match the requested difficulty consistently across every question.
 - Each question must have exactly 4 options.
 - Exactly 1 option must be clearly correct.
-- Keep the wording concise and natural.
-- Keep answer options short and plausible.
+- Keep the wording concise and natural for the intended learner level.
+- Keep answer options short, plausible, and clearly distinct.
 - Avoid duplicate questions, trick wording, and "all/none of the above".
+- Prefer questions that test understanding, not random trivia, unless the topic naturally requires factual recall.
 Return ONLY valid JSON as an array of objects in this format:
 [
   {{
@@ -78,11 +129,13 @@ Return ONLY valid JSON as an array of objects in this format:
   }}
 ]
 No markdown. No commentary.
-"""
-    response = client.models.generate_content(
-        model="gemini-3-flash-preview",
-        contents=prompt,
-    )
+""".strip()
+
+
+def generate_gemini_questions(topic: str, difficulty: str, count: int) -> list[Question]:
+    client = get_gemini_client()
+    prompt = build_generation_prompt(topic=topic, difficulty=difficulty, count=count)
+    response = _generate_content_with_retries(client, prompt)
     response_text = getattr(response, "text", None)
     if not response_text:
         raise RuntimeError("Gemini returned an empty response.")
@@ -94,7 +147,3 @@ No markdown. No commentary.
         raise RuntimeError("Gemini returned invalid JSON for quiz generation.") from exc
 
     return validate_questions(raw_questions, expected_count=count)
-
-
-def build_questions_download() -> str:
-    return json.dumps(st.session_state.questions, indent=2, ensure_ascii=False)

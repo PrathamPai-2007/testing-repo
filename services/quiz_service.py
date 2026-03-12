@@ -64,7 +64,7 @@ def submit_answer(selected_option: str) -> None:
     st.session_state.answers[question_index] = selected_option
 
     if selected_option == current_question["correct_answer"]:
-        st.session_state.score += 10
+        st.session_state.score += 4
     else:
         st.session_state.score -= 1
 
