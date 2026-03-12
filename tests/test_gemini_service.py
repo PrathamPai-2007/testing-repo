@@ -3,16 +3,22 @@ from unittest.mock import patch
 
 from google.genai.errors import ServerError
 
-from services.gemini_service import _generate_content_with_retries, build_generation_prompt
+from services.gemini_service import (
+    _generate_content_with_retries,
+    build_generation_prompt,
+    normalize_gemini_model,
+)
 
 
 class _FakeModels:
     def __init__(self, responses):
         self._responses = list(responses)
         self.calls = 0
+        self.last_model = None
 
     def generate_content(self, *, model, contents):
         self.calls += 1
+        self.last_model = model
         response = self._responses.pop(0)
         if isinstance(response, Exception):
             raise response
@@ -39,10 +45,11 @@ class GeminiRetryTests(unittest.TestCase):
         )
 
         with patch("services.gemini_service.time.sleep") as sleep_mock:
-            response = _generate_content_with_retries(client, "prompt")
+            response = _generate_content_with_retries(client, "prompt", "gemini-3-flash-preview")
 
         self.assertEqual(response.text, "[]")
         self.assertEqual(client.models.calls, 2)
+        self.assertEqual(client.models.last_model, "gemini-3-flash-preview")
         sleep_mock.assert_called_once_with(1.0)
 
     def test_returns_clean_message_after_retry_exhaustion(self) -> None:
@@ -56,7 +63,7 @@ class GeminiRetryTests(unittest.TestCase):
 
         with patch("services.gemini_service.time.sleep") as sleep_mock:
             with self.assertRaisesRegex(RuntimeError, "temporarily unavailable"):
-                _generate_content_with_retries(client, "prompt")
+                _generate_content_with_retries(client, "prompt", "gemini-2.5-flash")
 
         self.assertEqual(client.models.calls, 3)
         self.assertEqual(sleep_mock.call_count, 2)
@@ -75,6 +82,14 @@ class GeminiPromptTests(unittest.TestCase):
 
         self.assertIn("Difficulty level: Insane (Some of the hardest possible questions).", prompt)
         self.assertIn("exceptionally challenging", prompt)
+
+
+class GeminiModelTests(unittest.TestCase):
+    def test_known_preview_lite_model_is_accepted(self) -> None:
+        self.assertEqual(normalize_gemini_model("gemini-3.1-flash-lite-preview"), "gemini-3.1-flash-lite-preview")
+
+    def test_invalid_model_name_falls_back_to_default(self) -> None:
+        self.assertEqual(normalize_gemini_model("not-a-real-model"), "gemini-2.5-flash")
 
 
 if __name__ == "__main__":

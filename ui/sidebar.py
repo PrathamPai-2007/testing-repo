@@ -25,6 +25,7 @@ def render_sidebar() -> None:
         topic_key="sidebar_topic",
         difficulty_key="sidebar_difficulty",
         question_count_key="sidebar_question_count",
+        model_key="sidebar_model",
     )
 
     feedback = st.session_state.pop("generation_feedback", None)
@@ -47,6 +48,7 @@ def render_sidebar() -> None:
             st.sidebar.error(f"Could not generate question: {exc}")
 
     st.sidebar.markdown("---")
+    st.sidebar.caption(f"Active Gemini model: `{st.session_state.gemini_model}`")
     st.sidebar.write(f"**Total Questions Loaded:** {len(st.session_state.questions)}")
     pdf_download = None
     pdf_export_error = None

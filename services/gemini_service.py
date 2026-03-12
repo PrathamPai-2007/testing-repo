@@ -5,7 +5,7 @@ import time
 
 import streamlit as st  # type: ignore
 
-from constants import DIFFICULTY_DETAILS, GEMINI_API_KEY_NAME
+from constants import DEFAULT_GEMINI_MODEL, DIFFICULTY_DETAILS, GEMINI_API_KEY_NAME, GEMINI_MODEL_OPTIONS
 from models import Question
 from services.question_io import validate_questions
 
@@ -17,9 +17,15 @@ except ImportError:
     APIError = None
 
 
-GEMINI_MODEL_NAME = "gemini-2.5-flash"
 RETRYABLE_GEMINI_ERROR_CODES = {429, 500, 502, 503, 504}
 GEMINI_RETRY_DELAYS_SECONDS = (1.0, 2.0)
+
+
+def normalize_gemini_model(model_name: str) -> str:
+    normalized_model = str(model_name).strip()
+    if normalized_model in GEMINI_MODEL_OPTIONS:
+        return normalized_model
+    return DEFAULT_GEMINI_MODEL
 
 
 def get_gemini_api_key() -> str | None:
@@ -81,12 +87,13 @@ def _build_generation_error(exc: Exception) -> RuntimeError:
     return RuntimeError(f"Gemini request failed: {exc}")
 
 
-def _generate_content_with_retries(client, prompt: str):
+def _generate_content_with_retries(client, prompt: str, model_name: str):
     last_exc: Exception | None = None
+    normalized_model = normalize_gemini_model(model_name)
     for attempt in range(len(GEMINI_RETRY_DELAYS_SECONDS) + 1):
         try:
             return client.models.generate_content(
-                model=GEMINI_MODEL_NAME,
+                model=normalized_model,
                 contents=prompt,
             )
         except Exception as exc:
@@ -132,10 +139,10 @@ No markdown. No commentary.
 """.strip()
 
 
-def generate_gemini_questions(topic: str, difficulty: str, count: int) -> list[Question]:
+def generate_gemini_questions(topic: str, difficulty: str, count: int, model_name: str = DEFAULT_GEMINI_MODEL) -> list[Question]:
     client = get_gemini_client()
     prompt = build_generation_prompt(topic=topic, difficulty=difficulty, count=count)
-    response = _generate_content_with_retries(client, prompt)
+    response = _generate_content_with_retries(client, prompt, model_name=model_name)
     response_text = getattr(response, "text", None)
     if not response_text:
         raise RuntimeError("Gemini returned an empty response.")

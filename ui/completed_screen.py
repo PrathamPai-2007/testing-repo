@@ -1,38 +1,29 @@
 import streamlit as st  # type: ignore
 
-from services.question_io import question_dicts_to_models
+from services.quiz_engine import build_quiz_summary
+from state import read_quiz_session
 from state import reset_to_initial_state, start_quiz
 
 
 def render_completed_screen() -> None:
-    questions = question_dicts_to_models(st.session_state.questions)
-    total_questions = len(questions)
-    answered_questions = sum(1 for answer in st.session_state.answers if answer is not None)
-    correct_answers = sum(
-        1
-        for index, answer in enumerate(st.session_state.answers)
-        if answer is not None and answer == questions[index].correct_answer
-    )
-    accuracy = (correct_answers / total_questions * 100) if total_questions else 0
+    summary = build_quiz_summary(read_quiz_session())
 
     st.title("Quiz Completed")
     st.markdown(
         f"""
         <div class="score-display">
-            Score: {st.session_state.score} | Correct: {correct_answers}/{total_questions} | Accuracy: {accuracy:.0f}%
+            Score: {summary.score} | Correct: {summary.correct_answers}/{summary.total_questions} | Accuracy: {summary.accuracy:.0f}%
         </div>
         """,
         unsafe_allow_html=True,
     )
-    st.write(f"You answered {answered_questions} question(s). Review the results below or start another round.")
+    st.write(f"You answered {summary.answered_questions} question(s). Review the results below or start another round.")
 
-    for index, question in enumerate(questions, start=1):
-        selected_answer = st.session_state.answers[index - 1]
-        correct_answer = question.correct_answer
-        result_label = "Correct" if selected_answer == correct_answer else "Incorrect"
-        st.markdown(f"**Q{index}.** {question.question}")
-        st.write(f"Your answer: {selected_answer or 'Not answered'}")
-        st.write(f"Correct answer: {correct_answer}")
+    for index, item in enumerate(summary.review_items, start=1):
+        result_label = "Correct" if item.is_correct else "Incorrect"
+        st.markdown(f"**Q{index}.** {item.question.question}")
+        st.write(f"Your answer: {item.selected_answer or 'Not answered'}")
+        st.write(f"Correct answer: {item.question.correct_answer}")
         st.caption(result_label)
         st.markdown("---")
 

@@ -11,7 +11,6 @@ def render_setup_screen() -> None:
     key_is_configured = has_gemini_api_key()
     difficulty_details = get_current_difficulty_details()
     st.title("Gemini Quiz Generator")
-    st.write("Set a topic and difficulty here or in the sidebar. Both stay in sync.")
     if not key_is_configured:
         st.info(
             f"To generate new quiz questions, add `{GEMINI_API_KEY_NAME}` to your Streamlit secrets first."
@@ -23,6 +22,7 @@ def render_setup_screen() -> None:
             topic_key="setup_topic",
             difficulty_key="setup_difficulty",
             question_count_key="setup_question_count",
+            model_key="setup_model",
         )
 
     st.caption(
@@ -38,7 +38,8 @@ def render_setup_screen() -> None:
         st.write(
             f"{len(st.session_state.questions)} question(s) prepared for "
             f"`{st.session_state.topic or 'general knowledge'}` at "
-            f"`{difficulty_details['label']}` difficulty."
+            f"`{difficulty_details['label']}` difficulty using "
+            f"`{st.session_state.gemini_model}`."
         )
         start_col, regen_col = st.columns(2)
         with start_col:
@@ -59,9 +60,10 @@ def render_setup_screen() -> None:
 
     st.subheader("No Questions Yet")
     st.write(
-        f"Current settings: topic `{st.session_state.topic or 'general knowledge'}`, "
-        f"difficulty `{difficulty_details['label']}`, "
-        f"{int(st.session_state.questions_to_generate)} question(s)."
+        f"Current topic: `{st.session_state.topic or 'general knowledge'}`. "
+        f"Difficulty: `{difficulty_details['label']}`. "
+        f"Using model: `{st.session_state.gemini_model}`. "
+        f"Questions to be generated: `{int(st.session_state.questions_to_generate)}`."
     )
     if st.button("Generate from Scratch", type="primary", disabled=not key_is_configured):
         queue_generation(

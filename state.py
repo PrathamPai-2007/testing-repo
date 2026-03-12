@@ -1,34 +1,57 @@
 import streamlit as st  # type: ignore
 
-from constants import DEFAULT_QUESTIONS
+from constants import DEFAULT_GEMINI_MODEL, DEFAULT_QUESTIONS
+from models import Question
+from services.quiz_engine import (
+    QUIZ_PHASES,
+    QuizSession,
+    clear_quiz_session,
+    ensure_answer_slots as ensure_answer_slots_in_session,
+    mark_quiz_completed as mark_session_completed,
+    mark_quiz_ready as mark_session_ready,
+    reset_quiz_progress,
+    sync_current_question_state as sync_quiz_session,
+    validate_phase,
+)
 
 
-QUIZ_PHASES = ("setup", "generating", "ready", "in_progress", "completed")
+def read_quiz_session() -> QuizSession:
+    raw_questions = st.session_state.get("questions", [])
+    return QuizSession(
+        questions=[Question.from_dict(question) for question in raw_questions],
+        answers=list(st.session_state.get("answers", [])),
+        question_index=int(st.session_state.get("question_index", 0)),
+        selected_option=st.session_state.get("selected_option"),
+        submitted=bool(st.session_state.get("submitted", False)),
+        score=int(st.session_state.get("score", 0)),
+        phase=str(st.session_state.get("phase", "setup")),
+    )
+
+
+def write_quiz_session(session: QuizSession) -> None:
+    st.session_state.questions = [question.to_dict() for question in session.questions]
+    st.session_state.answers = list(session.answers)
+    st.session_state.question_index = session.question_index
+    st.session_state.selected_option = session.selected_option
+    st.session_state.submitted = session.submitted
+    st.session_state.score = session.score
+    st.session_state.phase = session.phase
 
 
 def set_phase(phase: str) -> None:
-    if phase not in QUIZ_PHASES:
-        raise ValueError(f"Unsupported quiz phase: {phase}")
-    st.session_state.phase = phase
+    st.session_state.phase = validate_phase(phase)
 
 
 def reset_quiz(phase: str = "setup") -> None:
-    st.session_state.question_index = 0
-    st.session_state.selected_option = None
-    st.session_state.submitted = False
-    st.session_state.score = 0
-    st.session_state.answers = [None] * len(st.session_state.get("questions", []))
-    set_phase(phase)
+    session = read_quiz_session()
+    reset_quiz_progress(session, phase=phase)
+    write_quiz_session(session)
 
 
 def reset_to_initial_state() -> None:
-    st.session_state.questions = []
-    st.session_state.answers = []
-    st.session_state.question_index = 0
-    st.session_state.selected_option = None
-    st.session_state.submitted = False
-    st.session_state.score = 0
-    set_phase("setup")
+    session = read_quiz_session()
+    clear_quiz_session(session)
+    write_quiz_session(session)
 
 
 def start_quiz() -> None:
@@ -36,41 +59,27 @@ def start_quiz() -> None:
 
 
 def mark_quiz_ready() -> None:
-    set_phase("ready" if st.session_state.get("questions") else "setup")
+    session = read_quiz_session()
+    mark_session_ready(session)
+    write_quiz_session(session)
 
 
 def mark_quiz_completed() -> None:
-    set_phase("completed")
+    session = read_quiz_session()
+    mark_session_completed(session)
+    write_quiz_session(session)
 
 
 def ensure_answer_slots() -> None:
-    questions = st.session_state.get("questions", [])
-    answers = st.session_state.get("answers")
-
-    if answers is None:
-        st.session_state.answers = [None] * len(questions)
-        return
-
-    if len(answers) < len(questions):
-        answers.extend([None] * (len(questions) - len(answers)))
-    elif len(answers) > len(questions):
-        del answers[len(questions) :]
+    session = read_quiz_session()
+    ensure_answer_slots_in_session(session)
+    write_quiz_session(session)
 
 
 def sync_current_question_state() -> None:
-    questions = st.session_state.get("questions", [])
-    ensure_answer_slots()
-
-    if not questions:
-        st.session_state.question_index = 0
-        st.session_state.selected_option = None
-        st.session_state.submitted = False
-        return
-
-    st.session_state.question_index = min(st.session_state.question_index, len(questions) - 1)
-    selected_option = st.session_state.answers[st.session_state.question_index]
-    st.session_state.selected_option = selected_option
-    st.session_state.submitted = selected_option is not None
+    session = read_quiz_session()
+    sync_quiz_session(session)
+    write_quiz_session(session)
 
 
 def initialize_state() -> None:
@@ -92,6 +101,8 @@ def initialize_state() -> None:
         st.session_state.difficulty = "medium"
     if "questions_to_generate" not in st.session_state:
         st.session_state.questions_to_generate = 1
+    if "gemini_model" not in st.session_state:
+        st.session_state.gemini_model = DEFAULT_GEMINI_MODEL
     if "is_generating" not in st.session_state:
         st.session_state.is_generating = False
     if "pending_generation" not in st.session_state:
@@ -105,7 +116,9 @@ def initialize_state() -> None:
     if "sidebar_default_applied" not in st.session_state:
         st.session_state.sidebar_default_applied = False
 
-    ensure_answer_slots()
-    sync_current_question_state()
-    if not st.session_state.questions and st.session_state.phase != "generating":
-        st.session_state.phase = "setup"
+    session = read_quiz_session()
+    ensure_answer_slots_in_session(session)
+    sync_quiz_session(session)
+    if not session.questions and session.phase != "generating":
+        session.phase = "setup"
+    write_quiz_session(session)

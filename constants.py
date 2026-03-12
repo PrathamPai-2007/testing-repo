@@ -1,4 +1,10 @@
 GEMINI_API_KEY_NAME = "GEMINI_API_KEY"
+GEMINI_MODEL_OPTIONS = (
+    "gemini-2.5-flash",
+    "gemini-3-flash-preview",
+    "gemini-3.1-flash-lite-preview",
+)
+DEFAULT_GEMINI_MODEL = GEMINI_MODEL_OPTIONS[0]
 
 DEFAULT_QUESTIONS: list[dict] = []
 
