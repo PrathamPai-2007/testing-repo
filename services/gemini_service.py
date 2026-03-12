@@ -1,5 +1,6 @@
 import json
 import os
+import re
 
 import streamlit as st  # type: ignore
 
@@ -42,6 +43,21 @@ def get_gemini_client():
     return genai.Client(api_key=api_key)
 
 
+def _extract_json_payload(response_text: str) -> str:
+    text = response_text.strip()
+    fenced_match = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL | re.IGNORECASE)
+    if fenced_match:
+        text = fenced_match.group(1).strip()
+
+    for opener, closer in (("[", "]"), ("{", "}")):
+        start = text.find(opener)
+        end = text.rfind(closer)
+        if start != -1 and end != -1 and start < end:
+            return text[start : end + 1]
+
+    return text
+
+
 def generate_gemini_questions(topic: str, difficulty: str, count: int) -> list[Question]:
     client = get_gemini_client()
     normalized_topic = topic.strip() or "general knowledge"
@@ -70,7 +86,14 @@ No markdown. No commentary.
     response_text = getattr(response, "text", None)
     if not response_text:
         raise RuntimeError("Gemini returned an empty response.")
-    return validate_questions(json.loads(response_text), expected_count=count)
+
+    try:
+        payload = _extract_json_payload(str(response_text))
+        raw_questions = json.loads(payload)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("Gemini returned invalid JSON for quiz generation.") from exc
+
+    return validate_questions(raw_questions, expected_count=count)
 
 
 def build_questions_download() -> str:

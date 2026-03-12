@@ -22,6 +22,7 @@ def validate_questions(raw_questions: object, expected_count: int | None = None)
         raise ValueError("No questions were provided.")
 
     normalized_questions: list[Question] = []
+    seen_questions: set[str] = set()
     for index, item in enumerate(raw_questions, start=1):
         if not isinstance(item, dict):
             raise ValueError(f"Question {index} must be a JSON object.")
@@ -40,12 +41,19 @@ def validate_questions(raw_questions: object, expected_count: int | None = None)
             raise ValueError(f"Question {index} must have exactly 4 options.")
         if any(not option for option in options):
             raise ValueError(f"Question {index} has an empty option.")
+        normalized_options = [option.casefold() for option in options]
+        if len(set(normalized_options)) != len(options):
+            raise ValueError(f"Question {index} must not contain duplicate options.")
 
         correct_answer = _normalize_correct_answer(raw_correct_answer, options)
         if not correct_answer:
             raise ValueError(f"Question {index} is missing a correct answer.")
         if correct_answer not in options:
             raise ValueError(f"Question {index} correct answer must match one of the options.")
+        normalized_question = question_text.casefold()
+        if normalized_question in seen_questions:
+            raise ValueError(f"Question {index} is duplicated.")
+        seen_questions.add(normalized_question)
 
         normalized_questions.append(
             Question(

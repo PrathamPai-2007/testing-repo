@@ -90,6 +90,8 @@ def initialize_state() -> None:
         st.session_state.generation_feedback = None
     if "phase" not in st.session_state:
         st.session_state.phase = "setup"
+    if "scroll_to_top" not in st.session_state:
+        st.session_state.scroll_to_top = False
 
     ensure_answer_slots()
     sync_current_question_state()

@@ -29,7 +29,7 @@ APP_STYLES = """
     transition: transform 0.2s, box-shadow 0.2s;
 }
 
-div[data-testid="column"] .stButton>button {
+.st-key-option-grid div[data-testid="column"] .stButton>button {
     height: var(--option-height);
     padding: 20px;
     font-size: var(--option-font-size);
@@ -40,8 +40,8 @@ div[data-testid="column"] .stButton>button {
     line-height: 1.2;
 }
 
-div[data-testid="column"] .stButton>button p,
-div[data-testid="column"] .stButton>button span {
+.st-key-option-grid div[data-testid="column"] .stButton>button p,
+.st-key-option-grid div[data-testid="column"] .stButton>button span {
     font-size: inherit;
     line-height: inherit;
     margin: 0;
@@ -63,12 +63,12 @@ div[data-testid="column"] .stButton>button span {
     color: #000000;
 }
 
-div[data-testid="column"]:nth-of-type(1) .stButton>button { background-color: #E21B3C; }
-div[data-testid="column"]:nth-of-type(2) .stButton>button { background-color: #1368CE; }
-div[data-testid="column"]:nth-of-type(3) .stButton>button { background-color: #D89E00; }
-div[data-testid="column"]:nth-of-type(4) .stButton>button { background-color: #26890C; }
+.st-key-option-grid div[data-testid="column"]:nth-of-type(1) .stButton>button { background-color: #E21B3C; }
+.st-key-option-grid div[data-testid="column"]:nth-of-type(2) .stButton>button { background-color: #1368CE; }
+.st-key-option-grid div[data-testid="column"]:nth-of-type(3) .stButton>button { background-color: #D89E00; }
+.st-key-option-grid div[data-testid="column"]:nth-of-type(4) .stButton>button { background-color: #26890C; }
 
-.submit-container .stButton>button, .next-container .stButton>button {
+.st-key-quiz-nav .stButton>button {
     height: 60px;
     font-size: 20px;
     margin-top: 20px;

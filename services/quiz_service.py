@@ -125,12 +125,14 @@ def process_pending_generation() -> None:
 def go_to_previous_question() -> None:
     if st.session_state.question_index > 0:
         st.session_state.question_index -= 1
+        st.session_state.scroll_to_top = True
     sync_current_question_state()
 
 
 def go_to_next_question() -> None:
     if st.session_state.question_index < len(st.session_state.questions) - 1:
         st.session_state.question_index += 1
+        st.session_state.scroll_to_top = True
         sync_current_question_state()
         return
 
