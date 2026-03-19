@@ -1,11 +1,16 @@
 import streamlit as st  # type: ignore
+import streamlit.components.v1 as components  # type: ignore
 
 
 APP_STYLES = """
 <style>
 :root {
-    --option-height: 250px;
-    --option-font-size: clamp(20px, 2.2vw, 30px);
+    --option-height: 132px;
+    --option-font-size: 18px;
+    --option-padding-y: 12px;
+    --option-padding-x: 14px;
+    --option-row-gap: 14px;
+    --option-neutral-bg: #565656;
 }
 
 .question-box {
@@ -26,30 +31,90 @@ APP_STYLES = """
     border: none;
     padding: 10px 15px;
     font-size: 16px;
-    transition: transform 0.2s, box-shadow 0.2s;
+    transition: background-color 0.15s ease;
 }
 
-div[data-testid="column"] .stButton>button {
+/* Fix: stElementContainer and all descendants need explicit 100% width to override Streamlit's fit-content */
+.st-key-answer_0,
+.st-key-answer_1,
+.st-key-answer_2,
+.st-key-answer_3,
+.st-key-empty_answer_0,
+.st-key-empty_answer_1,
+.st-key-empty_answer_2,
+.st-key-empty_answer_3,
+.st-key-answer_0 .stButton,
+.st-key-answer_1 .stButton,
+.st-key-answer_2 .stButton,
+.st-key-answer_3 .stButton,
+.st-key-empty_answer_0 .stButton,
+.st-key-empty_answer_1 .stButton,
+.st-key-empty_answer_2 .stButton,
+.st-key-empty_answer_3 .stButton,
+.st-key-answer_0 button,
+.st-key-answer_1 button,
+.st-key-answer_2 button,
+.st-key-answer_3 button,
+.st-key-empty_answer_0 button,
+.st-key-empty_answer_1 button,
+.st-key-empty_answer_2 button,
+.st-key-empty_answer_3 button,
+.st-key-answer_0 button > div,
+.st-key-answer_1 button > div,
+.st-key-answer_2 button > div,
+.st-key-answer_3 button > div,
+.st-key-empty_answer_0 button > div,
+.st-key-empty_answer_1 button > div,
+.st-key-empty_answer_2 button > div,
+.st-key-empty_answer_3 button > div {
+    width: 100% !important;
+}
+
+.st-key-option_row_1 {
+    margin-bottom: var(--option-row-gap);
+}
+
+.st-key-answer_0 .stButton>button,
+.st-key-answer_1 .stButton>button,
+.st-key-answer_2 .stButton>button,
+.st-key-answer_3 .stButton>button,
+.st-key-empty_answer_0 .stButton>button,
+.st-key-empty_answer_1 .stButton>button,
+.st-key-empty_answer_2 .stButton>button,
+.st-key-empty_answer_3 .stButton>button {
     height: var(--option-height);
-    padding: 20px;
+    padding: var(--option-padding-y) var(--option-padding-x);
     font-size: var(--option-font-size);
     font-weight: bold;
     color: white;
     white-space: normal;
     word-wrap: break-word;
     line-height: 1.2;
+    display: block;
+    text-align: center;
+    box-shadow: none;
+    overflow: hidden;
 }
 
-div[data-testid="column"] .stButton>button p,
-div[data-testid="column"] .stButton>button span {
+.st-key-answer_0 .stButton>button p,
+.st-key-answer_0 .stButton>button span,
+.st-key-answer_1 .stButton>button p,
+.st-key-answer_1 .stButton>button span,
+.st-key-answer_2 .stButton>button p,
+.st-key-answer_2 .stButton>button span,
+.st-key-answer_3 .stButton>button p,
+.st-key-answer_3 .stButton>button span,
+.st-key-empty_answer_0 .stButton>button p,
+.st-key-empty_answer_0 .stButton>button span,
+.st-key-empty_answer_1 .stButton>button p,
+.st-key-empty_answer_1 .stButton>button span,
+.st-key-empty_answer_2 .stButton>button p,
+.st-key-empty_answer_2 .stButton>button span,
+.st-key-empty_answer_3 .stButton>button p,
+.st-key-empty_answer_3 .stButton>button span {
     font-size: inherit;
     line-height: inherit;
     margin: 0;
-}
-
-.stButton>button:hover {
-    transform: scale(1.02);
-    box-shadow: 0px 5px 15px rgba(0,0,0,0.2);
 }
 
 .stButton>button[kind="primary"] {
@@ -63,12 +128,28 @@ div[data-testid="column"] .stButton>button span {
     color: #000000;
 }
 
-div[data-testid="column"]:nth-of-type(1) .stButton>button { background-color: #E21B3C; }
-div[data-testid="column"]:nth-of-type(2) .stButton>button { background-color: #1368CE; }
-div[data-testid="column"]:nth-of-type(3) .stButton>button { background-color: #D89E00; }
-div[data-testid="column"]:nth-of-type(4) .stButton>button { background-color: #26890C; }
+.st-key-answer_0 .stButton>button,
+.st-key-answer_1 .stButton>button,
+.st-key-answer_2 .stButton>button,
+.st-key-answer_3 .stButton>button,
+.st-key-empty_answer_0 .stButton>button,
+.st-key-empty_answer_1 .stButton>button,
+.st-key-empty_answer_2 .stButton>button,
+.st-key-empty_answer_3 .stButton>button {
+    background-color: var(--option-neutral-bg);
+}
 
-.submit-container .stButton>button, .next-container .stButton>button {
+.st-key-answer_0 .stButton>button:hover,
+.st-key-answer_1 .stButton>button:hover,
+.st-key-answer_2 .stButton>button:hover,
+.st-key-answer_3 .stButton>button:hover {
+    background-color: #616161;
+}
+
+.st-key-quiz_back .stButton>button,
+.st-key-quiz_next .stButton>button,
+.st-key-quiz_hint .stButton>button,
+.st-key-quiz_generate .stButton>button {
     height: 60px;
     font-size: 20px;
     margin-top: 20px;
@@ -80,7 +161,7 @@ div[data-testid="column"]:nth-of-type(4) .stButton>button { background-color: #2
     width: 100%;
     box-sizing: border-box;
     border-radius: 8px;
-    padding: 20px;
+    padding: var(--option-padding-y) var(--option-padding-x);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -91,7 +172,7 @@ div[data-testid="column"]:nth-of-type(4) .stButton>button { background-color: #2
     color: #FFFFFF;
     line-height: 1.2;
     word-break: break-word;
-    box-shadow: 0px 5px 15px rgba(0,0,0,0.18);
+    box-shadow: none;
 }
 
 .option-feedback__label {
@@ -173,4 +254,35 @@ def render_generating_overlay() -> None:
         </div>
         """,
         unsafe_allow_html=True,
+    )
+
+
+def render_close_sidebar_once() -> None:
+    components.html(
+        """
+        <script>
+        const closeSidebar = () => {
+          const parentWindow = window.parent;
+          if (!parentWindow) {
+            return;
+          }
+
+          const sidebar = parentWindow.document.querySelector('[data-testid="stSidebar"]');
+          if (!sidebar || sidebar.getAttribute('aria-expanded') !== 'true') {
+            return;
+          }
+
+          const collapseButton = parentWindow.document.querySelector(
+            '[data-testid="stSidebarCollapseButton"] button, button[aria-label="Close sidebar"]'
+          );
+          if (collapseButton) {
+            collapseButton.click();
+          }
+        };
+
+        requestAnimationFrame(closeSidebar);
+        setTimeout(closeSidebar, 150);
+        </script>
+        """,
+        height=0,
     )

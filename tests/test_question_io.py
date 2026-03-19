@@ -1,6 +1,7 @@
 import io
 import unittest
 
+from services.gemini_service import _extract_json_payload
 from services.question_io import (
     load_questions_from_csv_file,
     load_questions_from_json_file,
@@ -53,6 +54,35 @@ class ValidateQuestionsTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "must match one of the options"):
             validate_questions(raw_questions)
 
+    def test_question_with_duplicate_options_fails(self) -> None:
+        raw_questions = [
+            {
+                "question": "Pick the even number",
+                "options": ["2", "2", "3", "5"],
+                "correct_answer": "2",
+            }
+        ]
+
+        with self.assertRaisesRegex(ValueError, "duplicate options"):
+            validate_questions(raw_questions)
+
+    def test_duplicate_questions_fail_validation(self) -> None:
+        raw_questions = [
+            {
+                "question": "Capital of France?",
+                "options": ["Berlin", "Madrid", "Paris", "Rome"],
+                "correct_answer": "Paris",
+            },
+            {
+                "question": "capital of france?",
+                "options": ["Paris", "Lyon", "Nice", "Lille"],
+                "correct_answer": "Paris",
+            },
+        ]
+
+        with self.assertRaisesRegex(ValueError, "duplicated"):
+            validate_questions(raw_questions)
+
 
 class UploadLoaderTests(unittest.TestCase):
     def test_json_upload_loader_accepts_valid_file(self) -> None:
@@ -89,6 +119,36 @@ class UploadLoaderTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "missing question text"):
             load_questions_from_csv_file(uploaded_file)
+
+
+class GeminiParsingTests(unittest.TestCase):
+    def test_extract_json_payload_from_code_fence(self) -> None:
+        response_text = """
+        ```json
+        [{"question":"Largest planet?","options":["Earth","Mars","Jupiter","Venus"],"correct_answer":"Jupiter"}]
+        ```
+        """
+
+        payload = _extract_json_payload(response_text)
+
+        self.assertEqual(
+            payload,
+            '[{"question":"Largest planet?","options":["Earth","Mars","Jupiter","Venus"],"correct_answer":"Jupiter"}]',
+        )
+
+    def test_extract_json_payload_from_wrapped_text(self) -> None:
+        response_text = (
+            'Here is the quiz:\n'
+            '[{"question":"Largest planet?","options":["Earth","Mars","Jupiter","Venus"],"correct_answer":"Jupiter"}]\n'
+            "Use it directly."
+        )
+
+        payload = _extract_json_payload(response_text)
+
+        self.assertEqual(
+            payload,
+            '[{"question":"Largest planet?","options":["Earth","Mars","Jupiter","Venus"],"correct_answer":"Jupiter"}]',
+        )
 
 
 if __name__ == "__main__":
