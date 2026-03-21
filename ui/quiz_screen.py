@@ -3,13 +3,11 @@ import html
 import streamlit as st  # type: ignore
 import streamlit.components.v1 as components  # type: ignore
 
-from constants import GEMINI_API_KEY_NAME
 from services.gemini_service import has_gemini_api_key
 from services.quiz_service import (
     go_to_next_question,
     go_to_previous_question,
     process_pending_hint_generation,
-    queue_generation,
     queue_hint_generation,
     submit_answer,
 )
@@ -181,7 +179,7 @@ def render_quiz_ui() -> None:
         )
 
     with st.container(key="quiz-nav"):
-        back_col, next_col, hint_col, generate_col = st.columns(4)
+        back_col, next_col, hint_col = st.columns(3)
 
         with back_col:
             if st.button("Back", key="quiz_back", disabled=st.session_state.question_index == 0, type="primary"):
@@ -206,21 +204,6 @@ def render_quiz_ui() -> None:
             ):
                 queue_hint_generation()
                 st.rerun()
-
-        with generate_col:
-            if st.button("Generate a New Question", key="quiz_generate", disabled=not key_is_configured):
-                try:
-                    queue_generation(
-                        count=1,
-                        jump_to="latest",
-                        next_phase="in_progress",
-                        replace_existing=False,
-                    )
-                    st.rerun()
-                except Exception as exc:
-                    st.error(f"Could not generate question: {exc}")
-            if not key_is_configured:
-                st.caption(f"Set `{GEMINI_API_KEY_NAME}` in secrets to enable hints and question generation.")
 
     if st.session_state.get("is_generating_hint"):
         process_pending_hint_generation()

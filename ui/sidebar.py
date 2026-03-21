@@ -3,17 +3,54 @@ from datetime import datetime
 import streamlit as st  # type: ignore
 
 from constants import GEMINI_API_KEY_NAME
+from services.auth_service import sign_out_user
 from services.export_service import build_questions_download, build_questions_pdf_download, has_pdf_export_support
 from services.gemini_service import has_gemini_api_key
 from services.question_io import load_questions_from_uploaded_file
 from services.quiz_service import queue_generation, store_questions
-from state import mark_quiz_ready
+from state import log_out_user, mark_quiz_ready
 from ui.settings_controls import render_quiz_configuration_controls
 
 
 def render_sidebar() -> None:
     key_is_configured = has_gemini_api_key()
+    is_guest_user = bool(st.session_state.get("auth_is_guest"))
     st.sidebar.title("Quiz Settings")
+    if st.session_state.get("auth_user_email"):
+        st.sidebar.caption(f"Signed in as `{st.session_state.auth_user_email}`")
+        if st.sidebar.button("Logout", key="sidebar_logout"):
+            if not is_guest_user:
+                try:
+                    sign_out_user(
+                        access_token=str(st.session_state.get("auth_access_token") or ""),
+                        refresh_token=str(st.session_state.get("auth_refresh_token") or ""),
+                    )
+                except RuntimeError:
+                    pass
+            log_out_user()
+            st.rerun()
+        if is_guest_user:
+            nav_button_count = 1
+        else:
+            nav_button_count = 3 if st.session_state.get("auth_is_admin") else 2
+        nav_columns = st.sidebar.columns(nav_button_count)
+        with nav_columns[0]:
+            if st.button("Quiz", key="sidebar_nav_quiz", use_container_width=True):
+                st.session_state.app_screen = "quiz"
+                st.rerun()
+        if not is_guest_user:
+            with nav_columns[1]:
+                if st.button("History", key="sidebar_nav_history", use_container_width=True):
+                    st.session_state.app_screen = "history"
+                    st.rerun()
+        if not is_guest_user and st.session_state.get("auth_is_admin"):
+            with nav_columns[2]:
+                if st.button("Admin", key="sidebar_nav_admin", use_container_width=True):
+                    st.session_state.app_screen = "admin"
+                    st.rerun()
+        st.sidebar.markdown("---")
+        if is_guest_user:
+            st.sidebar.caption("Guest mode skips account features, history sync, and admin access.")
     st.sidebar.write("Generate quiz questions with Gemini.")
     if not key_is_configured:
         st.sidebar.warning(

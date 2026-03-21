@@ -1,6 +1,7 @@
 import streamlit as st  # type: ignore
 
 from models import Question
+from services.auth_service import increment_generated_quiz_count
 from services.gemini_service import generate_gemini_questions, generate_question_hint
 from services.quiz_engine import (
     go_to_next_question as advance_quiz_question,
@@ -92,6 +93,15 @@ def process_pending_generation() -> None:
             "type": "success",
             "message": f"{generated_count} Gemini question(s) added to the quiz.",
         }
+        auth_user_id = st.session_state.get("auth_user_id")
+        auth_access_token = st.session_state.get("auth_access_token")
+        auth_refresh_token = st.session_state.get("auth_refresh_token")
+        if auth_user_id and auth_access_token and auth_refresh_token:
+            increment_generated_quiz_count(
+                user_id=str(auth_user_id),
+                access_token=str(auth_access_token),
+                refresh_token=str(auth_refresh_token),
+            )
         next_phase = pending_generation.get("next_phase", "ready")
         if next_phase == "ready":
             mark_quiz_ready()

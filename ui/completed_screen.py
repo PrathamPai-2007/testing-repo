@@ -1,5 +1,6 @@
 import streamlit as st  # type: ignore
 
+from services.history_service import record_quiz_attempt
 from services.quiz_engine import build_quiz_summary
 from state import read_quiz_session
 from state import reset_to_initial_state, start_quiz
@@ -7,6 +8,21 @@ from state import reset_to_initial_state, start_quiz
 
 def render_completed_screen() -> None:
     summary = build_quiz_summary(read_quiz_session())
+    if (
+        not st.session_state.get("quiz_attempt_recorded")
+        and st.session_state.get("auth_user_id")
+        and st.session_state.get("auth_access_token")
+        and st.session_state.get("auth_refresh_token")
+    ):
+        record_quiz_attempt(
+            user_id=str(st.session_state.auth_user_id),
+            access_token=str(st.session_state.auth_access_token),
+            refresh_token=str(st.session_state.auth_refresh_token),
+            topic=str(st.session_state.topic),
+            difficulty=str(st.session_state.difficulty),
+            summary=summary,
+        )
+        st.session_state.quiz_attempt_recorded = True
 
     st.title("Quiz Completed")
     st.markdown(

@@ -1,146 +1,89 @@
 # AI Quiz
 
-A Streamlit quiz app that generates and runs multiple-choice quizzes with Gemini.
+AI Quiz is a Streamlit quiz app that uses Gemini for question generation and Supabase for authentication and persisted quiz history.
 
-It supports:
+## Current Architecture
 
-- quiz generation by topic and difficulty
-- question uploads from `JSON` or `CSV`
-- live scoring with one-question-at-a-time gameplay
-- per-question AI hints
-- export of the current quiz as `JSON` or `PDF`
-
-## Highlights
-
-- Gemini-powered quiz generation
-- Four difficulty levels: `easy`, `medium`, `hard`, `insane`
-- One-click hint generation for each question
-- Upload your own quiz sets
-- Review screen with score, accuracy, and answer breakdown
-- Restart the current quiz or start over from scratch
-- Sidebar controls for generation, exports, and uploads
-
-## How It Works
-
-1. Choose a topic, difficulty, question count, and Gemini model.
-2. Generate a new quiz or upload your own questions.
-3. Answer each question one at a time.
-4. Use the `Hint` button if you want a small nudge from Gemini.
-5. Finish the quiz and review your results.
+- Streamlit UI
+- Gemini API for quiz generation and hints
+- Supabase Auth for email/password sign up and login
+- Supabase PostgREST via the Supabase Python client for `profiles` and `quiz_attempts`
 
 ## Features
 
-### Quiz Generation
+- Email/password sign up and login
+- Gemini-powered quiz generation
+- AI hints for quiz questions
+- JSON and CSV upload support
+- JSON and PDF export support
+- Per-user quiz history
+- Admin dashboard powered by `profiles.is_admin`
 
-The app can generate fresh multiple-choice questions using Gemini based on:
+## Important v1 Auth Notes
 
-- topic
-- difficulty
-- requested number of questions
-- selected Gemini model
+- Login is email-only
+- Username support has been removed
+- Password reset is intentionally out of scope for this version
+- Admin access is assigned manually in Supabase by setting `profiles.is_admin = true`
 
-Generated quizzes are validated before they are added to the session.
+## Required Secrets
 
-### AI Hints
+Add these to Streamlit secrets:
 
-Each question includes a `Hint` button.
+```toml
+GEMINI_API_KEY = "your-gemini-api-key"
+SUPABASE_URL = "https://your-project-ref.supabase.co"
+SUPABASE_PUBLISHABLE_KEY = "sb_publishable_xxxxx"
+```
 
-When clicked:
+Example local file:
 
-- the app calls a lightweight Gemini model for a short hint
-- the button temporarily changes to `Generating..`
-- the generated hint is shown in a small text box
+```text
+Python/AI_Quiz/.streamlit/secrets.toml
+```
 
-Hints are designed to guide the user without directly revealing the answer.
+There is also a template at:
 
-### Quiz Rules
+```text
+Python/AI_Quiz/.streamlit/secrets.toml.example
+```
 
-- Each question has exactly 4 options.
-- Only one option is correct.
-- Each question can only be answered once.
-- Correct answer: `+4`
-- Incorrect answer: `-1`
-- Unanswered question: `0`
+## Supabase Setup
 
-### Upload Support
+Run the SQL in [`supabase_schema.sql`](./supabase_schema.sql) inside the Supabase SQL editor. It creates:
 
-You can load custom quizzes from:
+- `public.profiles`
+- `public.quiz_attempts`
+- row-level security policies for user-scoped reads/writes
+- admin read access on `profiles`
 
-- `JSON`
-- `CSV`
+Supabase project expectations:
 
-Uploaded questions are validated for:
+- Email/password auth enabled
+- Email confirmation turned off for this first version
+- At least one admin row manually marked with `is_admin = true`
 
-- required question text
-- exactly 4 options
-- non-empty options
-- no duplicate options
-- valid correct answer
-- no duplicate questions in the same upload
+## Install
 
-### Export Support
+From the `Python/AI_Quiz` directory:
 
-The current quiz can be downloaded as:
+```powershell
+pip install -r requirements.txt
+```
 
-- `JSON`
-- `PDF`
+## Run
 
-The PDF export includes the topic, difficulty, question list, options, and correct answers.
+```powershell
+streamlit run main.py
+```
 
-## Screens
+## Test
 
-### Setup Screen
+```powershell
+python -m unittest discover -s tests
+```
 
-The setup screen lets you:
-
-- choose topic, difficulty, question count, and model
-- generate a new quiz
-- start an already prepared quiz
-
-### Sidebar
-
-The sidebar provides:
-
-- synced quiz settings
-- quiz generation
-- export buttons
-- upload controls
-- loaded question count
-
-### Quiz Screen
-
-The quiz screen shows:
-
-- current question number
-- current score
-- answer options
-- correctness feedback after submission
-- navigation controls
-- hint generation
-- append-a-question generation
-
-### Completed Screen
-
-The completed screen shows:
-
-- final score
-- accuracy
-- correct answer count
-- per-question review
-
-It also lets the user:
-
-- restart the current quiz
-- start from scratch
-
-## Tech Stack
-
-- Python
-- Streamlit
-- Google Gemini API
-- ReportLab
-
-## Project Structure
+## Project Layout
 
 ```text
 Python/AI_Quiz/
@@ -150,98 +93,36 @@ Python/AI_Quiz/
 |-- state.py
 |-- requirements.txt
 |-- README.md
+|-- supabase_schema.sql
 |-- services/
+|   |-- __init__.py
+|   |-- admin_service.py
+|   |-- auth_service.py
 |   |-- export_service.py
 |   |-- gemini_service.py
+|   |-- history_service.py
 |   |-- question_io.py
 |   |-- quiz_engine.py
 |   |-- quiz_service.py
+|   |-- supabase_client.py
 |-- ui/
+|   |-- __init__.py
+|   |-- admin_screen.py
+|   |-- auth_screen.py
 |   |-- completed_screen.py
+|   |-- history_screen.py
 |   |-- quiz_screen.py
 |   |-- settings_controls.py
 |   |-- setup_screen.py
 |   |-- sidebar.py
 |   |-- styles.py
 |-- tests/
+|   |-- __init__.py
+|   |-- fake_supabase.py
+|   |-- test_admin_service.py
+|   |-- test_auth_service.py
 |   |-- test_gemini_service.py
+|   |-- test_history_service.py
 |   |-- test_question_io.py
 |   |-- test_quiz_engine.py
 ```
-
-## Installation
-
-From the `Python/AI_Quiz` directory:
-
-```powershell
-pip install -r requirements.txt
-```
-
-## Running The App
-
-```powershell
-streamlit run main.py
-```
-
-## Gemini API Key Setup
-
-Quiz generation and hints require a Gemini API key.
-
-You can provide it in one of these ways.
-
-### Option 1: Streamlit secrets
-
-Create:
-
-```text
-Python/AI_Quiz/.streamlit/secrets.toml
-```
-
-Add:
-
-```toml
-GEMINI_API_KEY = "your-real-key-here"
-```
-
-### Option 2: Environment variable
-
-```powershell
-$env:GEMINI_API_KEY = "your-real-key-here"
-```
-
-## Input Formats
-
-### JSON
-
-```json
-[
-  {
-    "question": "What is the capital of France?",
-    "options": ["Berlin", "Madrid", "Paris", "Rome"],
-    "correct_answer": "Paris"
-  }
-]
-```
-
-### CSV
-
-```text
-question,option1,option2,option3,option4,correct_answer
-What is the capital of France?,Berlin,Madrid,Paris,Rome,Paris
-```
-
-The validator also accepts `A`, `B`, `C`, or `D` as `correct_answer`.
-
-## Running Tests
-
-```powershell
-python -m unittest discover -s tests
-```
-
-## Notes
-
-- The app starts with no questions loaded.
-- A generation request currently allows `1` to `5` questions.
-- `Generate from Scratch` replaces the current quiz.
-- `Generate a New Question` appends a new question to the current quiz.
-- If no Gemini API key is configured, uploaded quizzes still work.
