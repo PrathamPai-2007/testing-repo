@@ -23,6 +23,21 @@ create table if not exists public.quiz_attempts (
 create index if not exists quiz_attempts_user_id_idx
   on public.quiz_attempts(user_id);
 
+create or replace function public.is_admin_user()
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1
+    from public.profiles
+    where id = auth.uid()
+      and is_admin = true
+  );
+$$;
+
 alter table public.profiles enable row level security;
 alter table public.quiz_attempts enable row level security;
 
@@ -52,14 +67,7 @@ create policy "admins can view all profiles"
 on public.profiles
 for select
 to authenticated
-using (
-  exists (
-    select 1
-    from public.profiles as current_profile
-    where current_profile.id = auth.uid()
-      and current_profile.is_admin = true
-  )
-);
+using (public.is_admin_user());
 
 drop policy if exists "users can view own quiz attempts" on public.quiz_attempts;
 create policy "users can view own quiz attempts"
