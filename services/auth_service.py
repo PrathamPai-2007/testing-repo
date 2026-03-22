@@ -115,17 +115,19 @@ def _fetch_profile(client, user_id: str) -> dict[str, Any] | None:
 
 def _upsert_profile(client, *, user_id: str, email: str) -> dict[str, Any]:
     existing_profile = _fetch_profile(client, user_id=user_id)
-    payload: dict[str, Any] = {
-        "id": user_id,
-        "email": email,
-    }
-    if existing_profile is not None:
-        payload["is_admin"] = bool(existing_profile.get("is_admin", False))
-        payload["generated_quiz_count"] = int(existing_profile.get("generated_quiz_count") or 0)
-        payload["last_online_at"] = existing_profile.get("last_online_at")
-        payload["created_at"] = existing_profile.get("created_at")
+    try:
+        if existing_profile is None:
+            client.table("profiles").insert({"id": user_id, "email": email}).execute()
+        elif str(existing_profile.get("email") or "") != email:
+            client.table("profiles").update({"email": email}).eq("id", user_id).execute()
+        else:
+            return existing_profile
+    except Exception as exc:
+        raise RuntimeError(
+            "Supabase rejected the profile write. Run supabase_schema.sql in your Supabase project and confirm the "
+            "profiles table plus RLS policies were created correctly."
+        ) from exc
 
-    client.table("profiles").upsert(payload).execute()
     profile = _fetch_profile(client, user_id=user_id)
     if profile is None:
         raise RuntimeError("Could not load your profile from Supabase.")

@@ -182,6 +182,11 @@ class FakeTableQuery:
 
         if self.action == "insert":
             payload = dict(self.payload or {})
+            if self.table_name == "profiles":
+                payload.setdefault("is_admin", False)
+                payload.setdefault("generated_quiz_count", 0)
+                payload.setdefault("last_online_at", None)
+                payload.setdefault("created_at", _now_iso())
             if self.table_name == "quiz_attempts":
                 payload["id"] = self.client.next_quiz_attempt_id
                 self.client.next_quiz_attempt_id += 1
