@@ -8,6 +8,8 @@ from state import log_in_guest_user, log_in_user
 def render_auth_screen() -> None:
     st.title("AI Quiz")
     st.write("Create an account, sign in, or continue as a guest to jump straight into the quiz.")
+    if st.session_state.get("auth_status_message"):
+        st.error(str(st.session_state.auth_status_message))
 
     guest_col, _ = st.columns([1, 2])
     with guest_col:

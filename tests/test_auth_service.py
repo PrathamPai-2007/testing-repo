@@ -6,6 +6,7 @@ from services.auth_service import (
     create_user,
     increment_generated_quiz_count,
     restore_authenticated_user,
+    SessionExpiredError,
     sign_out_user,
     touch_user_last_online,
     validate_email,
@@ -85,6 +86,23 @@ class AuthServiceTests(unittest.TestCase):
         self.assertIsNotNone(restored_user)
         self.assertEqual(restored_user.email, "quiz_master@example.com")  # type: ignore[union-attr]
 
+    def test_restore_authenticated_user_returns_none_for_expired_session(self) -> None:
+        with patch("services.auth_service._create_authenticated_supabase_client", side_effect=SessionExpiredError("expired")):
+            restored_user = restore_authenticated_user(
+                access_token="stale-access",
+                refresh_token="stale-refresh",
+            )
+
+        self.assertIsNone(restored_user)
+
+    def test_restore_authenticated_user_raises_for_profile_sync_failure(self) -> None:
+        with patch("services.auth_service._create_authenticated_supabase_client", side_effect=RuntimeError("Profile table missing")):
+            with self.assertRaisesRegex(RuntimeError, "Profile table missing"):
+                restore_authenticated_user(
+                    access_token="valid-access",
+                    refresh_token="valid-refresh",
+                )
+
     def test_sign_out_invalidates_existing_session(self) -> None:
         created_user = create_user(
             email="quiz_master@example.com",
@@ -110,12 +128,10 @@ class AuthServiceTests(unittest.TestCase):
         )
 
         increment_generated_quiz_count(
-            user_id=created_user.id,
             access_token=created_user.access_token,
             refresh_token=created_user.refresh_token,
         )
         touch_user_last_online(
-            user_id=created_user.id,
             access_token=created_user.access_token,
             refresh_token=created_user.refresh_token,
         )
@@ -123,6 +139,15 @@ class AuthServiceTests(unittest.TestCase):
         profile_row = self.fake_client.table("profiles").select("*").eq("id", created_user.id).limit(1).execute().data[0]
         self.assertEqual(profile_row["generated_quiz_count"], 1)
         self.assertIsNotNone(profile_row["last_online_at"])
+
+    def test_direct_profile_update_of_protected_columns_is_rejected(self) -> None:
+        created_user = create_user(
+            email="quiz_master@example.com",
+            password="supersecret123",
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "protected profile columns"):
+            self.fake_client.table("profiles").update({"is_admin": True}).eq("id", created_user.id).execute()
 
 
 if __name__ == "__main__":

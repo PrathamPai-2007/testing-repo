@@ -38,8 +38,68 @@ as $$
   );
 $$;
 
+create or replace function public.touch_my_last_online()
+returns timestamptz
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  updated_timestamp timestamptz := now();
+begin
+  update public.profiles
+  set last_online_at = updated_timestamp
+  where id = auth.uid();
+
+  if not found then
+    raise exception 'Could not find your profile in Supabase.';
+  end if;
+
+  return updated_timestamp;
+end;
+$$;
+
+create or replace function public.increment_my_generated_quiz_count()
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  updated_count integer;
+begin
+  update public.profiles
+  set generated_quiz_count = generated_quiz_count + 1
+  where id = auth.uid()
+  returning generated_quiz_count into updated_count;
+
+  if updated_count is null then
+    raise exception 'Could not find your profile in Supabase.';
+  end if;
+
+  return updated_count;
+end;
+$$;
+
 alter table public.profiles enable row level security;
 alter table public.quiz_attempts enable row level security;
+
+revoke all on public.profiles from anon, authenticated;
+grant select on public.profiles to authenticated;
+grant insert (id, email) on public.profiles to authenticated;
+grant update (email) on public.profiles to authenticated;
+
+revoke all on public.quiz_attempts from anon, authenticated;
+grant select on public.quiz_attempts to authenticated;
+grant insert (user_id, topic, difficulty, total_questions, answered_questions, correct_answers, accuracy, score)
+  on public.quiz_attempts to authenticated;
+grant usage, select on sequence public.quiz_attempts_id_seq to authenticated;
+
+revoke all on function public.touch_my_last_online() from public;
+grant execute on function public.touch_my_last_online() to authenticated;
+
+revoke all on function public.increment_my_generated_quiz_count() from public;
+grant execute on function public.increment_my_generated_quiz_count() to authenticated;
 
 drop policy if exists "users can view own profile" on public.profiles;
 create policy "users can view own profile"

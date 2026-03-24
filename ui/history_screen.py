@@ -1,16 +1,7 @@
-from datetime import datetime
-
 import streamlit as st  # type: ignore
 
 from services.history_service import build_user_history_summary, fetch_user_quiz_history
-
-
-def _format_attempt_time(created_at_iso: str) -> str:
-    try:
-        created_at = datetime.fromisoformat(created_at_iso)
-    except ValueError:
-        return created_at_iso
-    return created_at.strftime("%d %b %Y, %I:%M %p")
+from services.time_service import format_timestamp_local
 
 
 def render_history_screen() -> None:
@@ -55,7 +46,7 @@ def render_history_screen() -> None:
 Difficulty: `{attempt.difficulty}`  
 Score: `{attempt.score}` | Correct: `{attempt.correct_answers}/{attempt.total_questions}` | Accuracy: `{attempt.accuracy:.0f}%`  
 Answered: `{attempt.answered_questions}`  
-Completed: `{_format_attempt_time(attempt.created_at_iso)}`
+Completed: `{format_timestamp_local(attempt.created_at_iso)}`
 """
         )
         st.markdown("---")

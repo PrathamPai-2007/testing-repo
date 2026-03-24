@@ -10,8 +10,10 @@ SUPABASE_PUBLISHABLE_KEY = "SUPABASE_PUBLISHABLE_KEY"
 
 try:
     from supabase import create_client
+    from supabase.client import ClientOptions
 except ImportError:
     create_client = None
+    ClientOptions = None
 
 
 def _read_config_value(name: str) -> str | None:
@@ -41,7 +43,7 @@ def has_supabase_config() -> bool:
     return bool(get_supabase_url() and get_supabase_publishable_key())
 
 
-def create_supabase_client():
+def create_supabase_client(access_token: str | None = None):
     supabase_url = get_supabase_url()
     publishable_key = get_supabase_publishable_key()
     if create_client is None:
@@ -50,4 +52,14 @@ def create_supabase_client():
         raise RuntimeError(
             "Supabase is not configured. Set SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY in Streamlit secrets."
         )
-    return create_client(supabase_url, publishable_key)
+
+    options = None
+    normalized_access_token = str(access_token).strip() if access_token else None
+    if normalized_access_token:
+        if ClientOptions is None:
+            raise RuntimeError("Missing Supabase client options support.")
+        options = ClientOptions(headers={"Authorization": f"Bearer {normalized_access_token}"})
+
+    if options is None:
+        return create_client(supabase_url, publishable_key)
+    return create_client(supabase_url, publishable_key, options=options)

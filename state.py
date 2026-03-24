@@ -89,6 +89,39 @@ def has_app_access() -> bool:
     return is_authenticated() or is_guest_user()
 
 
+def _build_auth_token_key(access_token: str | None, refresh_token: str | None) -> str | None:
+    normalized_access_token = str(access_token).strip() if access_token else None
+    normalized_refresh_token = str(refresh_token).strip() if refresh_token else None
+    if not normalized_access_token or not normalized_refresh_token:
+        return None
+    return f"{normalized_access_token}:{normalized_refresh_token}"
+
+
+def _current_auth_identity() -> tuple[str | None, bool]:
+    current_user_id = st.session_state.get("auth_user_id")
+    normalized_user_id = str(current_user_id).strip() if current_user_id else None
+    return normalized_user_id or None, bool(st.session_state.get("auth_is_guest"))
+
+
+def _auth_identity_changed(*, user_id: str | None, is_guest: bool) -> bool:
+    current_user_id, current_is_guest = _current_auth_identity()
+    normalized_user_id = str(user_id).strip() if user_id else None
+    return current_is_guest != is_guest or current_user_id != normalized_user_id
+
+
+def _clear_auth_bound_state() -> None:
+    reset_to_initial_state()
+    st.session_state.is_generating = False
+    st.session_state.pending_generation = None
+    st.session_state.generation_feedback = None
+    st.session_state.is_generating_hint = False
+    st.session_state.pending_hint_generation = None
+    st.session_state.hint_feedback = None
+    st.session_state.auth_restored_token_key = None
+    st.session_state.auth_last_online_token_key = None
+    st.session_state.auth_last_online_synced_at = None
+
+
 def _store_authenticated_user(user: AuthenticatedUser) -> None:
     st.session_state.auth_user_id = str(user.id)
     st.session_state.auth_user_email = str(user.email)
@@ -97,9 +130,13 @@ def _store_authenticated_user(user: AuthenticatedUser) -> None:
     st.session_state.auth_refresh_token = str(user.refresh_token)
     st.session_state.auth_is_guest = False
     st.session_state.auth_view = "app"
+    st.session_state.auth_status_message = None
+    st.session_state.auth_restored_token_key = _build_auth_token_key(user.access_token, user.refresh_token)
 
 
 def log_in_user(user: AuthenticatedUser) -> None:
+    if _auth_identity_changed(user_id=user.id, is_guest=False):
+        _clear_auth_bound_state()
     _store_authenticated_user(user)
     st.session_state.app_screen = "admin" if user.is_admin else "quiz"
     st.session_state.quiz_attempt_recorded = False
@@ -108,12 +145,16 @@ def log_in_user(user: AuthenticatedUser) -> None:
 
 def sync_authenticated_user(user: AuthenticatedUser) -> None:
     current_screen = st.session_state.get("app_screen", "quiz")
+    if _auth_identity_changed(user_id=user.id, is_guest=False):
+        _clear_auth_bound_state()
     _store_authenticated_user(user)
     if current_screen == "admin" and not user.is_admin:
         st.session_state.app_screen = "quiz"
 
 
 def log_in_guest_user() -> None:
+    if _auth_identity_changed(user_id=None, is_guest=True):
+        _clear_auth_bound_state()
     st.session_state.auth_user_id = None
     st.session_state.auth_user_email = "Guest"
     st.session_state.auth_is_admin = False
@@ -121,12 +162,14 @@ def log_in_guest_user() -> None:
     st.session_state.auth_refresh_token = None
     st.session_state.auth_is_guest = True
     st.session_state.auth_view = "app"
+    st.session_state.auth_status_message = None
     st.session_state.app_screen = "quiz"
     st.session_state.quiz_attempt_recorded = False
     st.session_state.sidebar_default_applied = False
 
 
 def clear_auth_state() -> None:
+    _clear_auth_bound_state()
     st.session_state.auth_user_id = None
     st.session_state.auth_user_email = None
     st.session_state.auth_is_admin = False
@@ -134,19 +177,12 @@ def clear_auth_state() -> None:
     st.session_state.auth_refresh_token = None
     st.session_state.auth_is_guest = False
     st.session_state.auth_view = "login"
-    if st.session_state.get("app_screen") in {"admin", "history"}:
-        st.session_state.app_screen = "quiz"
+    st.session_state.app_screen = "quiz"
 
 
 def log_out_user() -> None:
-    reset_to_initial_state()
+    st.session_state.auth_status_message = None
     clear_auth_state()
-    st.session_state.is_generating = False
-    st.session_state.pending_generation = None
-    st.session_state.generation_feedback = None
-    st.session_state.is_generating_hint = False
-    st.session_state.pending_hint_generation = None
-    st.session_state.hint_feedback = None
 
 
 def initialize_state() -> None:
@@ -204,6 +240,14 @@ def initialize_state() -> None:
         st.session_state.auth_is_guest = False
     if "auth_view" not in st.session_state:
         st.session_state.auth_view = "login"
+    if "auth_status_message" not in st.session_state:
+        st.session_state.auth_status_message = None
+    if "auth_restored_token_key" not in st.session_state:
+        st.session_state.auth_restored_token_key = None
+    if "auth_last_online_token_key" not in st.session_state:
+        st.session_state.auth_last_online_token_key = None
+    if "auth_last_online_synced_at" not in st.session_state:
+        st.session_state.auth_last_online_synced_at = None
     if "app_screen" not in st.session_state:
         st.session_state.app_screen = "quiz"
     if "quiz_attempt_recorded" not in st.session_state:

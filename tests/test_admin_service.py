@@ -20,24 +20,21 @@ class AdminServiceTests(unittest.TestCase):
             email="admin@example.com",
             password="AdminPass123",
         )
-        self.fake_client.table("profiles").update({"is_admin": True}).eq("id", admin_user.id).execute()
+        self.fake_client.set_profile_admin(admin_user.id, is_admin=True)
 
         regular_user = create_user(
             email="quiz_user@example.com",
             password="Password123",
         )
         increment_generated_quiz_count(
-            user_id=regular_user.id,
             access_token=regular_user.access_token,
             refresh_token=regular_user.refresh_token,
         )
         increment_generated_quiz_count(
-            user_id=regular_user.id,
             access_token=regular_user.access_token,
             refresh_token=regular_user.refresh_token,
         )
         touch_user_last_online(
-            user_id=regular_user.id,
             access_token=regular_user.access_token,
             refresh_token=regular_user.refresh_token,
         )

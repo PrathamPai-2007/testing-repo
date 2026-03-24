@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import Any
 
 from services.supabase_client import create_supabase_client
@@ -19,6 +18,10 @@ class AuthenticatedUser:
     is_admin: bool
     access_token: str
     refresh_token: str
+
+
+class SessionExpiredError(RuntimeError):
+    """Raised when stored auth tokens no longer represent a valid session."""
 
 
 def validate_email(email: str) -> str:
@@ -89,19 +92,41 @@ def _is_duplicate_email_error(exc: Exception) -> bool:
     return "already registered" in lowered or "already been registered" in lowered
 
 
+def _is_expired_session_error(exc: Exception) -> bool:
+    lowered = _error_message(exc).casefold()
+    return any(
+        fragment in lowered
+        for fragment in (
+            "session expired",
+            "session has expired",
+            "invalid session",
+            "invalid refresh token",
+            "refresh token",
+            "jwt expired",
+            "token has expired",
+        )
+    )
+
+
 def _create_authenticated_supabase_client(access_token: str, refresh_token: str):
     normalized_access_token = str(access_token).strip()
     normalized_refresh_token = str(refresh_token).strip()
     if not normalized_access_token or not normalized_refresh_token:
-        raise RuntimeError("Your session has expired. Please sign in again.")
+        raise SessionExpiredError("Your session has expired. Please sign in again.")
 
-    client = create_supabase_client()
-    session_response = client.auth.set_session(normalized_access_token, normalized_refresh_token)
+    auth_client = create_supabase_client()
+    try:
+        session_response = auth_client.auth.set_session(normalized_access_token, normalized_refresh_token)
+    except Exception as exc:
+        if _is_expired_session_error(exc):
+            raise SessionExpiredError("Your session has expired. Please sign in again.") from exc
+        raise RuntimeError(f"Could not restore your Supabase session: {_error_message(exc)}") from exc
     session = _extract_session(session_response)
     current_user = _extract_user(session_response)
     refreshed_access_token, refreshed_refresh_token = _extract_tokens(session)
     if current_user is None or not refreshed_access_token or not refreshed_refresh_token:
-        raise RuntimeError("Could not restore your Supabase session. Please sign in again.")
+        raise SessionExpiredError("Your session has expired. Please sign in again.")
+    client = create_supabase_client(access_token=refreshed_access_token)
     return client, current_user, refreshed_access_token, refreshed_refresh_token
 
 
@@ -111,6 +136,17 @@ def _fetch_profile(client, user_id: str) -> dict[str, Any] | None:
     if not rows:
         return None
     return dict(rows[0])
+
+
+def _execute_profile_rpc(client, function_name: str) -> Any:
+    try:
+        response = client.rpc(function_name, {}).execute()
+    except Exception as exc:
+        raise RuntimeError(
+            "Supabase rejected the protected profile update. Run supabase_schema.sql in your Supabase project so the "
+            "expected RPC functions and grants are in place."
+        ) from exc
+    return _read_attr(response, "data")
 
 
 def _upsert_profile(client, *, user_id: str, email: str) -> dict[str, Any]:
@@ -239,9 +275,9 @@ def restore_authenticated_user(*, access_token: str, refresh_token: str) -> Auth
         )
         user_id, email = _extract_user_identity(user)
         if not user_id or not email:
-            return None
+            raise RuntimeError("Supabase did not return the stored account details.")
         profile = _upsert_profile(client, user_id=user_id, email=email)
-    except Exception:
+    except SessionExpiredError:
         return None
 
     return _build_authenticated_user(
@@ -260,21 +296,21 @@ def sign_out_user(*, access_token: str, refresh_token: str) -> None:
     client.auth.sign_out()
 
 
-def touch_user_last_online(*, user_id: str, access_token: str, refresh_token: str) -> None:
+def touch_user_last_online(*, access_token: str, refresh_token: str) -> None:
     client, _, _, _ = _create_authenticated_supabase_client(
         access_token=access_token,
         refresh_token=refresh_token,
     )
-    client.table("profiles").update({"last_online_at": datetime.now(UTC).isoformat()}).eq("id", str(user_id).strip()).execute()
+    updated_timestamp = _execute_profile_rpc(client, "touch_my_last_online")
+    if updated_timestamp is None:
+        raise RuntimeError("Could not update your last online timestamp in Supabase.")
 
 
-def increment_generated_quiz_count(*, user_id: str, access_token: str, refresh_token: str) -> None:
+def increment_generated_quiz_count(*, access_token: str, refresh_token: str) -> None:
     client, _, _, _ = _create_authenticated_supabase_client(
         access_token=access_token,
         refresh_token=refresh_token,
     )
-    profile = _fetch_profile(client, user_id=str(user_id).strip())
-    if profile is None:
-        raise RuntimeError("Could not find your profile in Supabase.")
-    updated_count = int(profile.get("generated_quiz_count") or 0) + 1
-    client.table("profiles").update({"generated_quiz_count": updated_count}).eq("id", str(user_id).strip()).execute()
+    updated_count = _execute_profile_rpc(client, "increment_my_generated_quiz_count")
+    if updated_count is None:
+        raise RuntimeError("Could not update your generated quiz count in Supabase.")

@@ -31,8 +31,17 @@ class FakeTableResponse:
     data: list[dict[str, Any]]
 
 
+@dataclass(slots=True)
+class FakeRpcResponse:
+    data: Any
+
+
 def _now_iso() -> str:
     return datetime.now(UTC).isoformat()
+
+
+PROTECTED_PROFILE_COLUMNS = {"is_admin", "generated_quiz_count", "last_online_at", "created_at"}
+PROFILE_INSERTABLE_COLUMNS = {"id", "email"}
 
 
 class FakeAuth:
@@ -163,6 +172,8 @@ class FakeTableQuery:
 
         if self.action == "upsert":
             payload = dict(self.payload or {})
+            if self.table_name == "profiles" and PROTECTED_PROFILE_COLUMNS.intersection(payload):
+                raise RuntimeError("Direct writes to protected profile columns are not allowed.")
             row_id = str(payload["id"])
             existing_row = next((row for row in table if str(row.get("id")) == row_id), None)
             if existing_row is None:
@@ -183,6 +194,9 @@ class FakeTableQuery:
         if self.action == "insert":
             payload = dict(self.payload or {})
             if self.table_name == "profiles":
+                unexpected_columns = set(payload) - PROFILE_INSERTABLE_COLUMNS
+                if unexpected_columns:
+                    raise RuntimeError("Direct writes to protected profile columns are not allowed.")
                 payload.setdefault("is_admin", False)
                 payload.setdefault("generated_quiz_count", 0)
                 payload.setdefault("last_online_at", None)
@@ -195,6 +209,8 @@ class FakeTableQuery:
             return FakeTableResponse(data=[deepcopy(payload)])
 
         if self.action == "update":
+            if self.table_name == "profiles" and PROTECTED_PROFILE_COLUMNS.intersection(self.payload or {}):
+                raise RuntimeError("Direct writes to protected profile columns are not allowed.")
             updated_rows: list[dict[str, Any]] = []
             for row in table:
                 if self._matches_filters(row):
@@ -203,6 +219,34 @@ class FakeTableQuery:
             return FakeTableResponse(data=updated_rows)
 
         raise RuntimeError(f"Unsupported fake table action: {self.action}")
+
+
+class FakeRpcQuery:
+    def __init__(self, client: "FakeSupabaseClient", function_name: str, params: dict[str, Any] | None = None) -> None:
+        self.client = client
+        self.function_name = function_name
+        self.params = dict(params or {})
+
+    def execute(self) -> FakeRpcResponse:
+        current_session = self.client.auth._current_session
+        if current_session is None:
+            raise RuntimeError("No active session")
+
+        profile_row = self.client._get_profile_row(current_session.user.id)
+        if profile_row is None:
+            raise RuntimeError("Could not find your profile in Supabase.")
+
+        if self.function_name == "touch_my_last_online":
+            updated_timestamp = _now_iso()
+            profile_row["last_online_at"] = updated_timestamp
+            return FakeRpcResponse(data=updated_timestamp)
+
+        if self.function_name == "increment_my_generated_quiz_count":
+            updated_count = int(profile_row.get("generated_quiz_count") or 0) + 1
+            profile_row["generated_quiz_count"] = updated_count
+            return FakeRpcResponse(data=updated_count)
+
+        raise RuntimeError(f"Unsupported fake RPC: {self.function_name}")
 
 
 class FakeSupabaseClient:
@@ -214,7 +258,19 @@ class FakeSupabaseClient:
         self.next_quiz_attempt_id = 1
         self.auth = FakeAuth(self)
 
+    def _get_profile_row(self, user_id: str) -> dict[str, Any] | None:
+        return next((row for row in self.tables["profiles"] if str(row.get("id")) == str(user_id)), None)
+
+    def set_profile_admin(self, user_id: str, *, is_admin: bool) -> None:
+        profile_row = self._get_profile_row(user_id)
+        if profile_row is None:
+            raise RuntimeError("Unknown profile")
+        profile_row["is_admin"] = bool(is_admin)
+
     def table(self, table_name: str) -> FakeTableQuery:
         if table_name not in self.tables:
             raise RuntimeError(f"Unknown fake table: {table_name}")
         return FakeTableQuery(self, table_name)
+
+    def rpc(self, function_name: str, params: dict[str, Any] | None = None) -> FakeRpcQuery:
+        return FakeRpcQuery(self, function_name=function_name, params=params)

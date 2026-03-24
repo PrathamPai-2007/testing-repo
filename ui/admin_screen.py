@@ -1,18 +1,7 @@
-from datetime import datetime
-
 import streamlit as st  # type: ignore
 
 from services.admin_service import fetch_all_user_overviews
-
-
-def _format_timestamp(timestamp_iso: str | None) -> str:
-    if not timestamp_iso:
-        return "Never"
-    try:
-        timestamp = datetime.fromisoformat(timestamp_iso)
-    except ValueError:
-        return timestamp_iso
-    return timestamp.strftime("%d %b %Y, %I:%M %p")
+from services.time_service import format_timestamp_local
 
 
 def render_admin_screen() -> None:
@@ -49,8 +38,8 @@ def render_admin_screen() -> None:
                 "Email": user.email,
                 "Role": "Admin" if user.is_admin else "User",
                 "Generated Quizzes": user.generated_quiz_count,
-                "Last Online": _format_timestamp(user.last_online_at_iso),
-                "Joined": _format_timestamp(user.created_at_iso),
+                "Last Online": format_timestamp_local(user.last_online_at_iso),
+                "Joined": format_timestamp_local(user.created_at_iso),
             }
             for user in user_overviews
         ],

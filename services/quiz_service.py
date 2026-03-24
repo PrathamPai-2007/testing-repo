@@ -98,7 +98,6 @@ def process_pending_generation() -> None:
         auth_refresh_token = st.session_state.get("auth_refresh_token")
         if auth_user_id and auth_access_token and auth_refresh_token:
             increment_generated_quiz_count(
-                user_id=str(auth_user_id),
                 access_token=str(auth_access_token),
                 refresh_token=str(auth_refresh_token),
             )
