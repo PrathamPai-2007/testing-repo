@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from services.auth_service import create_user
-from services.history_service import build_user_history_summary, fetch_user_quiz_history, record_quiz_attempt
+from services.history_service import build_user_history_summary, delete_quiz_attempt, fetch_user_quiz_history, record_quiz_attempt
 from services.quiz_engine import QuizSummary
 from tests.fake_supabase import FakeSupabaseClient
 
@@ -119,6 +119,55 @@ class HistoryServiceTests(unittest.TestCase):
 
         self.assertEqual(len(attempts), 1)
         self.assertEqual(attempts[0].topic, "biology")
+
+    def test_user_can_delete_own_quiz_attempt(self) -> None:
+        attempt = record_quiz_attempt(
+            user_id=self.primary_user.id,
+            access_token=self.primary_user.access_token,
+            refresh_token=self.primary_user.refresh_token,
+            topic="fractions",
+            difficulty="medium",
+            summary=_build_summary(score=7, correct_answers=2, total_questions=3, answered_questions=3),
+        )
+
+        deleted = delete_quiz_attempt(
+            attempt_id=attempt.id,
+            access_token=self.primary_user.access_token,
+            refresh_token=self.primary_user.refresh_token,
+        )
+
+        attempts = fetch_user_quiz_history(
+            user_id=self.primary_user.id,
+            access_token=self.primary_user.access_token,
+            refresh_token=self.primary_user.refresh_token,
+        )
+        self.assertTrue(deleted)
+        self.assertEqual(attempts, [])
+
+    def test_user_cannot_delete_someone_elses_quiz_attempt(self) -> None:
+        other_attempt = record_quiz_attempt(
+            user_id=self.other_user.id,
+            access_token=self.other_user.access_token,
+            refresh_token=self.other_user.refresh_token,
+            topic="chemistry",
+            difficulty="hard",
+            summary=_build_summary(score=7, correct_answers=2, total_questions=2, answered_questions=2),
+        )
+
+        deleted = delete_quiz_attempt(
+            attempt_id=other_attempt.id,
+            access_token=self.primary_user.access_token,
+            refresh_token=self.primary_user.refresh_token,
+        )
+
+        attempts = fetch_user_quiz_history(
+            user_id=self.other_user.id,
+            access_token=self.other_user.access_token,
+            refresh_token=self.other_user.refresh_token,
+        )
+        self.assertFalse(deleted)
+        self.assertEqual(len(attempts), 1)
+        self.assertEqual(attempts[0].id, other_attempt.id)
 
 
 if __name__ == "__main__":

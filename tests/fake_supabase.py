@@ -246,6 +246,18 @@ class FakeRpcQuery:
             profile_row["generated_quiz_count"] = updated_count
             return FakeRpcResponse(data=updated_count)
 
+        if self.function_name == "delete_my_quiz_attempt":
+            target_attempt_id = int(self.params.get("target_attempt_id") or 0)
+            deleted_count = 0
+            remaining_attempts: list[dict[str, Any]] = []
+            for row in self.client.tables["quiz_attempts"]:
+                if int(row.get("id") or 0) == target_attempt_id and str(row.get("user_id")) == current_session.user.id:
+                    deleted_count += 1
+                else:
+                    remaining_attempts.append(row)
+            self.client.tables["quiz_attempts"] = remaining_attempts
+            return FakeRpcResponse(data=deleted_count)
+
         raise RuntimeError(f"Unsupported fake RPC: {self.function_name}")
 
 

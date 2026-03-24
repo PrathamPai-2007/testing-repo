@@ -94,6 +94,21 @@ def fetch_user_quiz_history(*, user_id: str, access_token: str, refresh_token: s
     return [_normalize_attempt_row(row) for row in rows[: max(1, int(limit))]]
 
 
+def delete_quiz_attempt(*, attempt_id: int, access_token: str, refresh_token: str) -> bool:
+    client, _, _, _ = _create_authenticated_supabase_client(
+        access_token=access_token,
+        refresh_token=refresh_token,
+    )
+    response = client.rpc(
+        "delete_my_quiz_attempt",
+        {"target_attempt_id": int(attempt_id)},
+    ).execute()
+    deleted_count = _read_attr(response, "data")
+    if deleted_count is None:
+        raise RuntimeError("Could not delete your quiz attempt.")
+    return int(deleted_count) > 0
+
+
 def build_user_history_summary(*, user_id: str, access_token: str, refresh_token: str) -> QuizHistorySummary:
     attempts = fetch_user_quiz_history(
         user_id=user_id,

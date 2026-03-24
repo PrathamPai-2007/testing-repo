@@ -1,6 +1,6 @@
 import streamlit as st  # type: ignore
 
-from services.history_service import build_user_history_summary, fetch_user_quiz_history
+from services.history_service import build_user_history_summary, delete_quiz_attempt, fetch_user_quiz_history
 from services.time_service import format_timestamp_local
 
 
@@ -40,13 +40,31 @@ def render_history_screen() -> None:
         return
 
     for attempt in attempts:
-        st.markdown(
-            f"""
+        details_col, action_col = st.columns([6, 1])
+        with details_col:
+            st.markdown(
+                f"""
 **{attempt.topic}**  
 Difficulty: `{attempt.difficulty}`  
 Score: `{attempt.score}` | Correct: `{attempt.correct_answers}/{attempt.total_questions}` | Accuracy: `{attempt.accuracy:.0f}%`  
 Answered: `{attempt.answered_questions}`  
 Completed: `{format_timestamp_local(attempt.created_at_iso)}`
 """
-        )
+            )
+        with action_col:
+            if st.button("Delete", key=f"delete_attempt_{attempt.id}", use_container_width=True):
+                try:
+                    deleted = delete_quiz_attempt(
+                        attempt_id=attempt.id,
+                        access_token=str(access_token),
+                        refresh_token=str(refresh_token),
+                    )
+                except RuntimeError as exc:
+                    st.error(str(exc))
+                else:
+                    if deleted:
+                        st.success("Quiz attempt deleted.")
+                    else:
+                        st.info("That quiz attempt was already removed.")
+                    st.rerun()
         st.markdown("---")

@@ -81,6 +81,26 @@ begin
 end;
 $$;
 
+drop function if exists public.delete_user_quiz_history(uuid);
+
+create or replace function public.delete_my_quiz_attempt(target_attempt_id bigint)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  deleted_count integer;
+begin
+  delete from public.quiz_attempts
+  where id = target_attempt_id
+    and user_id = auth.uid();
+
+  get diagnostics deleted_count = row_count;
+  return deleted_count;
+end;
+$$;
+
 alter table public.profiles enable row level security;
 alter table public.quiz_attempts enable row level security;
 
@@ -100,6 +120,9 @@ grant execute on function public.touch_my_last_online() to authenticated;
 
 revoke all on function public.increment_my_generated_quiz_count() from public;
 grant execute on function public.increment_my_generated_quiz_count() to authenticated;
+
+revoke all on function public.delete_my_quiz_attempt(bigint) from public;
+grant execute on function public.delete_my_quiz_attempt(bigint) to authenticated;
 
 drop policy if exists "users can view own profile" on public.profiles;
 create policy "users can view own profile"
